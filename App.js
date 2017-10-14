@@ -7,13 +7,16 @@ import {
 	Button,
 	NativeAppEventEmitter,
 	Picker,
-	Modal
+	Modal,
+	Image,
+	TouchableHighlight
 } from 'react-native';
-import { Header, Button as NButton } from "react-native-elements";
+import { Header } from "react-native-elements";
+import Sound from 'react-native-sound';
 import Tts from 'react-native-tts';
 import { getResponse } from './Api';
 
-
+Sound.setCategory('Playback');
 const SpeechToText = require('react-native-speech-to-text-ios');
 
 const languageConfig = {
@@ -21,17 +24,31 @@ const languageConfig = {
 		code: 'cs',
 		locale: 'cs-CZ',
 		voice: 'com.apple.ttsbundle.Iveta-premium',
-		greetings: 'Ahoj cestovateli',
+		greetings: 'Ahoj cestovateli!',
 		buy: 'Koupit',
-	}
-}
+	},
+	de: {
+		code: 'de',
+		locale: 'de-DE',
+		voice: 'com.apple.ttsbundle.siri_female_de-DE_compact',
+		greetings: 'Hallo Reisende!',
+		buy: 'Kaufen',
+	},
+	en: {
+		code: 'en',
+		locale: 'en-US',
+		voice: 'com.apple.ttsbundle.Samantha-compact',
+		greetings: 'Hi, Traveller!',
+		buy: 'Buy',
+	},
+};
 
 export default class App extends React.Component {
 
 	constructor() {
 		super();
 		this.state = {
-			recording: true,
+			recording: false,
 			records: [],
 			language: languageConfig.cs,
 			modalVisible: false
@@ -42,8 +59,10 @@ export default class App extends React.Component {
 	}
 
 	componentDidMount = () => {
+		this.startSound = new Sound('./beep_start.wav', Sound.MAIN_BUNDLE, (e) => console.log(e));
+		this.endSound = new Sound('./beep_end.wav', Sound.MAIN_BUNDLE, (e) => console.log(e));
 		this.initialListener = true;
-		Tts.voices().then(voices => console.log(voices));
+		//Tts.voices().then(voices => console.log(voices));
 		Tts.setDefaultLanguage(this.state.language.locale);
 		Tts.setDefaultVoice(this.state.language.voice);
 		Tts.setDefaultPitch(1.1);
@@ -57,20 +76,26 @@ export default class App extends React.Component {
 		});
 
 		Tts.addEventListener('tts-finish', (event) => {
-			if (this.initialListener) {
-				SpeechToText.startRecognition("cs-CZ");
-				this.setState({recording: true});
-			}
-			this.initialListener = false;
+
 		});
+
+		// Tts.addEventListener('tts-finish', (event) => {
+		// 	if (this.initialListener) {
+		// 		this.startSound.play((success) => {
+		// 			SpeechToText.startRecognition(this.state.language.code);
+		// 			this.setState({recording: true});
+		// 		});
+		// 	}
+		// 	this.initialListener = false;
+		// });
 
 		NativeAppEventEmitter.addListener(
 			'SpeechToText',
 			(result) => {
-				console.log(result.isFinal);
 				if (result.error) {
 					alert(JSON.stringify(result.error));
 				}
+
 				if (this.stopTimeout) {
 					clearTimeout(this.stopTimeout);
 				}
@@ -82,8 +107,9 @@ export default class App extends React.Component {
 				if (result.isFinal === true) {
 					SpeechToText.stopRecognition();
 					if (result.bestTranscription) {
-						//Tts.speak(result.bestTranscription.formattedString);
-						this.handleInput(result.bestTranscription.formattedString);
+						this.endSound.play((success) => {
+							this.handleInput(result.bestTranscription.formattedString);
+						});
 					}
 				}
 				if (result.bestTranscription) {
@@ -95,8 +121,11 @@ export default class App extends React.Component {
 
 	speak = () => {
 		console.log('speak');
-		SpeechToText.startRecognition("cs-CZ");
-		this.setState({recording: true});
+		this.startSound.play(() => {
+			SpeechToText.startRecognition(this.state.language.locale);
+			this.setState({recording: true});
+		});
+
 	};
 
 	handleInput = (input) => {
@@ -107,13 +136,12 @@ export default class App extends React.Component {
 			isFinal: true,
 			key: 'a' + this.state.records.length,
 		});
-		getResponse('cs', input, this.sessionId).then((response) => {
+		getResponse(this.state.language.code, input, this.sessionId).then((response) => {
 			this.setState({recording: false});
 			if (response.payload.isFinal) {
 				this.sessionId = Math.random().toString(36).substring(7);
 			}
 			Tts.speak(response.payload.message);
-			response.payload.key = 'a' + this.state.records.length;
 			this.addRecord({
 				message: response.payload.message,
 				type: response.payload.type,
@@ -126,19 +154,24 @@ export default class App extends React.Component {
 
 	renderSpeakButton() {
 		if (this.state.recording === false) {
-			return (<Button
-				onPress={this.speak}
-				title="Speak"
-				color="#841584"
-				accessibilityLabel="Learn more about this purple button"
-			/>);
+			return (
+				<TouchableHighlight onPress={this.speak}>
+				<Image
+					style={{width: 60, height: 60}}
+					source={require('./micro.jpg')}
+				/>
+			</TouchableHighlight>);
 		} else {
-			return null;
+			return (
+				<Image
+					style={{width: 150, height: 50}}
+					source={require('./listen-equalizer.jpg')}
+				/>
+			);
 		}
 	}
 
 	renderMessage(item) {
-		console.log(item);
 		let style = styles.message;
 		let wraperStyle = styles.messageWrapper;
 		if (item.type === 'query') {
@@ -147,17 +180,23 @@ export default class App extends React.Component {
 		}
 		let tickets = null;
 		if (item.type === 'tickets') {
-			tickets = item.data.map( (tic) => {
+			tickets = item.data.map((tic) => {
 				return this.renderFlight(Math.random().toString(36).substring(7), tic);
 			});
 		}
-
+		let hotels = null;
+		if (item.type === 'hotels') {
+			hotels = item.data.map((hotel) => {
+				return this.renderHotel(Math.random().toString(36).substring(7), hotel);
+			});
+		}
 		return (
 			<View  key={item.key}>
 			<View style={wraperStyle}>
 				<View style={style}>
 					<Text style={styles.messageText}>{item.message}</Text>
 					{tickets? <View style={{marginTop: 5, flex: 1, flexDirection: 'column', width:'100%'}}>{tickets}</View> : null}
+					{hotels? <View style={{marginTop: 5, flex: 1, flexDirection: 'column', width:'100%'}}>{hotels}</View> : null}
 				</View>
 			</View>
 			</View>
@@ -172,6 +211,34 @@ export default class App extends React.Component {
 					<Text style={{ fontSize:16, color:'#fff' }}>{ticket.price} EUR</Text>
 					<Text style={{ fontSize:12, color:'#fff' }}>{ticket.departureTime} - {ticket.arrivalTime}</Text>
 					<Text style={{ fontSize:12, color:'#fff' }}>{ticket.routes.map((routes) => (`[${routes[0]}->${routes[1]}]`))}</Text>
+				</View>
+				<View style={{
+					paddingTop: 10,
+				}}>
+					<Button
+						title={this.state.language.buy}
+						color="#fff"
+						style={{
+							backgroundColor: styles.ticketWrapper.backgroundColor,
+							padding: 5,
+						}}
+						onPress={() => alert('DONE! (Just a mock. Out of Red Bull SRY.)')}
+					/>
+				</View>
+			</View>
+		)
+	}
+
+	renderHotel(key, hotel) {
+		return (
+			<View key={key} style={styles.ticketWrapper}>
+				<Image
+					style={{width: 60, height: 60, marginRight: 4, borderRadius: 6}}
+					source={{uri: hotel.place.thumbnail_url}}
+				/>
+				<View style={{ maxWidth: 150 }}>
+					<Text style={{ fontSize:16, color:'#fff', fontWeight: 'bold' }}>{hotel.place.name}</Text>
+					<Text style={{ fontSize:16, color:'#fff' }}>{hotel.booking_com.price} EUR</Text>
 				</View>
 				<View style={{
 					paddingTop: 10,
@@ -205,9 +272,29 @@ export default class App extends React.Component {
 				visible={this.state.modalVisible}>
 				<Picker
 					selectedValue={this.state.language.code}
-					onValueChange={(lang) => this.setState({language: lang})}>
-					<Picker.Item label="Java" value="java" />
-					<Picker.Item label="JavaScript" value="js" />
+					onValueChange={(lang) => {
+						console.log('LANG', languageConfig, lang, languageConfig[lang]);
+						this.initialListener = true;
+						Tts.setDefaultLanguage(languageConfig[lang].locale);
+						Tts.setDefaultVoice(languageConfig[lang].voice);
+						Tts.setDefaultPitch(1.1);
+						Tts.speak(languageConfig[lang].greetings);
+						this.setState({
+							language: languageConfig[lang],
+							records: [{
+								message: languageConfig[lang].greetings,
+								type: 'message',
+								data: null,
+								isFinal: true,
+								key: 'a0'
+							}],
+							modalVisible: false
+						});
+
+					}}>
+					<Picker.Item label="CS" value="cs" />
+					<Picker.Item label="EN" value="en" />
+					<Picker.Item label="DE" value="de" />
 				</Picker>
 			</Modal>
 		)
@@ -220,10 +307,10 @@ export default class App extends React.Component {
 		return (
 			<View style={styles.container}>
 				<Header
-					centerComponent={{ text: 'Kiwi', style: { color: '#fff', fontSize: 20 } }}
+					centerComponent={{ text: 'Travel Assistant', style: { color: '#fff', fontSize: 20 } }}
 					backgroundColor={"#01bba5"}
 					statusBarProps={{ barStyle: 'light-content' }}
-					rightComponent={<Button title={this.state.language.code} onPress={() => this.setState({modalVisible:true})}/>}
+					rightComponent={<Button color='#fff' style={{marginTop:10}} title={this.state.language.code} onPress={() => this.setState({modalVisible:true})}/>}
 				/>
 				<ScrollView style={styles.scroler}>
 				{messages}
@@ -258,7 +345,7 @@ const styles = StyleSheet.create({
 		marginTop: 5,
 		borderRadius: 10,
 		borderBottomLeftRadius: 0,
-		maxWidth: '85%',
+		maxWidth: '88%',
 	},
 	messageWrapper: {
 		flex: 1,

@@ -20,6 +20,7 @@
     "react": "16.0.0-alpha.12",
     "react-native": "^0.48.4",
     "react-native-elements": "^0.17.0",
+    "react-native-sound": "^0.10.4",
     "react-native-speech-to-text-ios": "^1.0.4",
     "react-native-tts": "^1.4.1",
     "react-native-vector-icons": "^4.4.2"

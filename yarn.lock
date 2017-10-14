@@ -3573,6 +3573,10 @@ react-native-side-menu@^1.0.2:
   dependencies:
     prop-types "^15.5.10"
 
+react-native-sound@^0.10.4:
+  version "0.10.4"
+  resolved "https://registry.yarnpkg.com/react-native-sound/-/react-native-sound-0.10.4.tgz#242286558f457e023dbed42e8c6cbe52cfd313d4"
+
 react-native-speech-to-text-ios@^1.0.4:
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/react-native-speech-to-text-ios/-/react-native-speech-to-text-ios-1.0.4.tgz#65e20a6146de7967e6d41972c8d611b6ad937f82"
